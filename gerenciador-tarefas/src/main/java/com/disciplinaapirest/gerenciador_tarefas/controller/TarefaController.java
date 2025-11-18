@@ -1,60 +1,118 @@
+// src/main/java/com/disciplinaapirest/gerenciador_tarefas/controller/TarefaController.java
+
 package com.disciplinaapirest.gerenciador_tarefas.controller;
 
 import com.disciplinaapirest.gerenciador_tarefas.model.Tarefa;
-import com.disciplinaapirest.gerenciador_tarefas.repository.TarefaRepository;
+import com.disciplinaapirest.gerenciador_tarefas.service.TarefaService;
+import com.disciplinaapirest.gerenciador_tarefas.exception.ResourceNotFoundException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-import jakarta.validation.Valid; // Necessário para habilitar a validação
+import jakarta.validation.Valid;
 
 import java.util.List;
-import java.util.Optional;
 
 @RestController
-@RequestMapping("/api/tarefas")
+@RequestMapping("/api/v1/tarefas") // Endpoint principal versionado
 public class TarefaController {
 
     @Autowired
-    private TarefaRepository repository;
+    private TarefaService service;
 
-    // GET: Lista todas as tarefas
+    /**
+     * @apiNote GET /api/v1/tarefas
+     *
+     *          Lista todas as tarefas cadastradas no sistema.
+     *
+     * @return Lista de todas as Tarefas.
+     * @response 200 OK: Retorna a lista de tarefas.
+     * @response 204 No Content: Se a lista estiver vazia.
+     */
     @GetMapping
     public List<Tarefa> listarTodas() {
-        return repository.findAll();
+        return service.buscarTodas();
     }
 
-    // POST: Cria uma nova tarefa
+    /**
+     * @apiNote GET /api/v1/tarefas/{id}
+     *
+     *          Busca uma tarefa específica pelo seu ID.
+     *
+     * @param id O ID (Long) da tarefa a ser buscada.
+     * @return A tarefa encontrada.
+     * @response 200 OK: Retorna a tarefa encontrada.
+     * @response 404 Not Found: Se nenhuma tarefa for encontrada com o ID fornecido.
+     * @example Exemplo de URL: /api/v1/tarefas/1
+     */
+    @GetMapping("/{id}")
+    public Tarefa buscarPorId(@PathVariable Long id) {
+        return service.buscarPorId(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Tarefa não encontrada com ID: " + id));
+    }
+
+    /**
+     * @apiNote POST /api/v1/tarefas
+     *
+     *          Cria uma nova tarefa.
+     *
+     * @param novaTarefa O objeto Tarefa (JSON) a ser criado.
+     * @return A tarefa criada com o ID gerado.
+     * @response 201 Created: Tarefa criada com sucesso.
+     * @response 400 Bad Request: Dados de entrada inválidos (ex: Título vazio).
+     * @example Exemplo de Body (JSON): {"titulo": "Comprar Pão", "descricao": "Pão
+     *          integral", "concluida": false}
+     */
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public Tarefa criarTarefa(@Valid @RequestBody Tarefa novaTarefa) { // <-- Adicionada a anotação @Valid aqui
-        return repository.save(novaTarefa);
+    public Tarefa criarTarefa(@Valid @RequestBody Tarefa novaTarefa) {
+        return service.salvar(novaTarefa);
     }
 
-    // PUT: Atualiza uma tarefa
+    /**
+     * @apiNote PUT /api/v1/tarefas/{id}
+     *
+     *          Atualiza uma tarefa existente.
+     *
+     * @param id               O ID (Long) da tarefa a ser atualizada.
+     * @param tarefaAtualizada O objeto Tarefa (JSON) com os novos dados.
+     * @return A tarefa atualizada.
+     * @response 200 OK: Retorna a tarefa atualizada.
+     * @response 400 Bad Request: Dados de entrada inválidos.
+     * @response 404 Not Found: Se a tarefa a ser atualizada não for encontrada.
+     * @example Exemplo de URL: /api/v1/tarefas/1
+     */
     @PutMapping("/{id}")
     public ResponseEntity<Tarefa> atualizarTarefa(@PathVariable Long id, @Valid @RequestBody Tarefa tarefaAtualizada) {
-        Optional<Tarefa> tarefaExistente = repository.findById(id);
 
-        if (tarefaExistente.isPresent()) {
-            Tarefa tarefa = tarefaExistente.get();
-            tarefa.setTitulo(tarefaAtualizada.getTitulo());
-            tarefa.setDescricao(tarefaAtualizada.getDescricao());
-            tarefa.setConcluida(tarefaAtualizada.isConcluida());
-            return ResponseEntity.ok(repository.save(tarefa));
-        } else {
-            return ResponseEntity.notFound().build();
-        }
+        Tarefa tarefaExistente = service.buscarPorId(id)
+                .orElseThrow(
+                        () -> new ResourceNotFoundException("Tarefa não encontrada para atualização com ID: " + id));
+
+        tarefaExistente.setTitulo(tarefaAtualizada.getTitulo());
+        tarefaExistente.setDescricao(tarefaAtualizada.getDescricao());
+        tarefaExistente.setConcluida(tarefaAtualizada.isConcluida());
+
+        return ResponseEntity.ok(service.salvar(tarefaExistente));
     }
 
-    // DELETE: Exclui uma tarefa
+    /**
+     * @apiNote DELETE /api/v1/tarefas/{id}
+     *
+     *          Exclui uma tarefa pelo seu ID.
+     *
+     * @param id O ID (Long) da tarefa a ser excluída.
+     * @return Resposta sem conteúdo.
+     * @response 204 No Content: Tarefa excluída com sucesso.
+     * @response 404 Not Found: Se a tarefa a ser excluída não for encontrada.
+     * @example Exemplo de URL: /api/v1/tarefas/1
+     */
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deletarTarefa(@PathVariable Long id) {
-        if (repository.existsById(id)) {
-            repository.deleteById(id);
-            return ResponseEntity.noContent().build();
-        } else {
-            return ResponseEntity.notFound().build();
+        if (!service.existePorId(id)) {
+            throw new ResourceNotFoundException("Tarefa não encontrada para exclusão com ID: " + id);
         }
+        service.deletar(id);
+        return ResponseEntity.noContent().build();
     }
 }
